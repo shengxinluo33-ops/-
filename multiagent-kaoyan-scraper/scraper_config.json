@@ -1,0 +1,60 @@
+{
+  "url": "https://yz.chsi.com.cn/kyzx/fsx/2024/202403/20240315/1765484324.html",
+  "headers": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://yz.chsi.com.cn/",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
+  },
+  "timeout": 10,
+  "container": "div.content table tr",
+  "skip_rows": 2,
+  "fields": {
+    "学校": {
+      "type": "from_title",
+      "pattern": "(.+?)\\d{4}年.*?复试"
+    },
+    "年份": {
+      "type": "constant",
+      "value": 2024
+    },
+    "专业": "td:nth-of-type(1)",
+    "政治": "td:nth-of-type(2)",
+    "外语": "td:nth-of-type(3)",
+    "业务课一": "td:nth-of-type(4)",
+    "业务课二": "td:nth-of-type(5)",
+    "总分": "td:nth-of-type(6)"
+  },
+  "filter": {
+    "method": "td_count",
+    "min": 6,
+    "max": 6
+  },
+  "clean": {
+    "strip": true,
+    "replace": [
+      [
+        "--",
+        ""
+      ],
+      [
+        "\\s+",
+        ""
+      ]
+    ]
+  },
+  "output": "university_cs_master_fsx.csv",
+  "encoding": "utf-8-sig",
+  "delay": 2,
+  "retry": {
+    "max_attempts": 3,
+    "backoff_factor": 2,
+    "not_retry_status": [
+      404,
+      403
+    ]
+  },
+  "pagination": {
+    "enabled": false
+  }
+}

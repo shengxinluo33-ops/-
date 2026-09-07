@@ -1,0 +1,10 @@
+{
+  "url": "https://example.com/kaoyan/scores",
+  "container": "table.score-table tbody tr",
+  "fields": {
+    "年份": "td:nth-child(1)",
+    "专业": "td:nth-child(2)",
+    "复试分数线": "td:nth-child(3)"
+  },
+  "output": "kaoyan_scores.csv"
+}
