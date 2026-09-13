@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智能体交互模型 · 实时可视化</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1d212a;
+    --line: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #8b94a7;
+    --accent: #4c8dff;
+    --ok: #35c07f;
+    --warn: #f0a63c;
+    --err: #f0616d;
+    --user: #2b6ef5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; background: var(--bg); color: var(--text);
+    font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    display: flex; flex-direction: column;
+  }
+
+  /* ---------------- 顶栏 ---------------- */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  header .spacer { margin-left: auto; }
+  .badge {
+    font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .badge.live { color: var(--ok); border-color: #245c43; }
+  .badge.bad { color: var(--err); border-color: #5c2630; }
+  button {
+    font: inherit; font-size: 12.5px; cursor: pointer;
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px;
+  }
+  button:hover { border-color: #3b4351; }
+  button:disabled { opacity: .45; cursor: default; }
+
+  /* ---------------- 布局 ---------------- */
+  main { flex: 1; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  @media (max-width: 880px) { main { grid-template-columns: 1fr; } aside { display: none; } }
+
+  /* ---------------- 对话 ---------------- */
+  #chat { display: flex; flex-direction: column; min-height: 0; }
+  #log { flex: 1; overflow-y: auto; padding: 22px 20px; }
+  .msg { max-width: 780px; margin: 0 auto 22px; }
+  .who { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .bubble {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 15px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.user { display: flex; flex-direction: column; align-items: flex-end; }
+  .msg.user .who { align-self: flex-end; }
+  .msg.user .bubble { background: var(--user); border-color: var(--user); color: #fff; }
+  .caret {
+    display: inline-block; width: 7px; background: var(--muted);
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* 工具调用卡片 */
+  .cards { margin: 8px 0 10px; }
+  details.card {
+    background: var(--panel2); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px; margin-bottom: 6px; padding: 6px 10px;
+  }
+  details.card.fail { border-left-color: var(--err); }
+  details.card summary {
+    cursor: pointer; font-size: 12.5px; list-style: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  details.card summary::-webkit-details-marker { display: none; }
+  details.card summary::before { content: "▸"; color: var(--muted); }
+  details.card[open] summary::before { content: "▾"; }
+  .card .name { color: var(--accent); font-family: ui-monospace, Menlo, monospace; }
+  .card.fail .name { color: var(--err); }
+  .card .args { color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+  .card .ms { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+  .card .out {
+    margin-top: 8px; padding: 8px 10px; background: #12151b; border-radius: 6px;
+    font: 11.5px/1.6 ui-monospace, Menlo, monospace; color: #b9c2d4;
+    white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto;
+  }
+  .card .out a, .bubble a { color: var(--accent); }
+  .card .out a:hover, .bubble a:hover { text-decoration: underline; }
+  .hint { font-size: 12px; color: var(--muted); font-style: italic; margin-bottom: 8px; }
+
+  .chips { max-width: 780px; margin: 0 auto; display: flex; gap: 8px; flex-wrap: wrap; padding: 0 20px 8px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--panel2); border-radius: 999px;
+    padding: 5px 12px; font-size: 12px; color: var(--muted); cursor: pointer;
+  }
+  .chip:hover { color: var(--text); border-color: var(--accent); }
+
+  form { max-width: 780px; margin: 0 auto; width: 100%; display: flex; gap: 10px; padding: 10px 20px 18px; }
+  textarea {
+    flex: 1; resize: none; height: 54px; padding: 12px 14px; font: inherit; color: var(--text);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  form button { width: 92px; background: var(--accent); border-color: var(--accent); color: #fff; }
+  form button.stopping { background: var(--err); border-color: var(--err); }
+
+  /* ---------------- 右侧：交互模型 ---------------- */
+  aside {
+    border-left: 1px solid var(--line); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .sec { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .sec h2 {
+    font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 12px; font-weight: 600;
+  }
+
+  /* 状态机 */
+  .fsm { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+  .node {
+    flex: 1; min-width: 44px; text-align: center; font-size: 11.5px; color: var(--muted);
+    padding: 6px 2px; border-radius: 6px; border: 1px solid transparent;
+  }
+  .node.on {
+    color: #fff; background: #1f3a68; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(76, 141, 255, .12);
+  }
+  .node.on.fail { background: #3a1f24; border-color: var(--err); box-shadow: 0 0 0 3px rgba(240,97,109,.12); }
+  .node.on.stopped { background: #3a2f1f; border-color: var(--warn); box-shadow: 0 0 0 3px rgba(240,166,60,.12); }
+  .node.done { color: #9fb3d9; }
+  .arrow { color: #39404e; font-size: 10px; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 6px; text-align: center; }
+  .stat b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 10.5px; color: var(--muted); }
+
+  /* 工具清单 */
+  .tool {
+    font-size: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line);
+  }
+  .tool:last-child { border-bottom: none; }
+  .tool .n { font-family: ui-monospace, Menlo, monospace; color: var(--accent); }
+  .tool .d { color: var(--muted); font-size: 11.5px; }
+
+  /* 事件流 */
+  #events {
+    flex: 1; min-height: 90px; overflow-y: auto; padding: 12px 16px;
+    font: 11px/1.7 ui-monospace, Menlo, monospace; color: #7f8ba3;
+  }
+  #events div { white-space: pre-wrap; word-break: break-all; }
+  #events .t-token { color: #55627a; }
+  #events .t-state { color: var(--accent); }
+  #events .t-tool_call { color: var(--warn); }
+  #events .t-tool_result { color: var(--ok); }
+  #events .t-error { color: var(--err); }
+  #events .t-stopped { color: var(--warn); }
+  #events .t-history { color: #6f7d99; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>智能体交互模型</h1>
+  <span class="sub">observe → think → act → observe</span>
+  <span class="spacer"></span>
+  <span class="badge" id="modelBadge">模型加载中…</span>
+  <span class="badge" id="wsBadge">未连接</span>
+  <button id="reset" title="清空当前会话的历史">清空会话</button>
+  <button id="newSession" title="另起一个会话，旧历史仍在磁盘上">新会话</button>
+  <button id="retry" title="撤销上一轮，拿同一个问题重新问一遍" disabled>重新生成</button>
+</header>
+
+<main>
+  <!-- ================= 对话 ================= -->
+  <section id="chat">
+    <div id="log"></div>
+    <div class="chips">
+      <span class="chip">昆明现在天气怎么样？</span>
+      <span class="chip">我在昆明，今天适合去哪玩？</span>
+      <span class="chip">北京和广州今天哪里更暖和？</span>
+      <span class="chip">现在几点了？(128 + 372) * 15 是多少？</span>
+      <span class="chip">上网查一下最近的 AI 新闻</span>
+      <span class="chip">2026 年放假安排是怎么定的？</span>
+    </div>
+    <form id="form">
+      <textarea id="input" placeholder="问点什么…  Enter 发送，Shift+Enter 换行"></textarea>
+      <button id="send" type="submit">发送</button>
+    </form>
+  </section>
+
+  <!-- ================= 交互模型 ================= -->
+  <aside>
+    <div class="sec">
+      <h2>当前状态</h2>
+      <div class="fsm" id="fsm"></div>
+    </div>
+
+    <div class="sec">
+      <h2>本轮统计</h2>
+      <div class="stats">
+        <div class="stat"><b id="s-turn">0</b><span>轮次</span></div>
+        <div class="stat"><b id="s-tools">0</b><span>工具调用</span></div>
+        <div class="stat"><b id="s-chunks">0</b><span>文本增量</span></div>
+        <div class="stat"><b id="s-time">0.0s</b><span>耗时</span></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>工具注册表</h2>
+      <div id="toolList"><div class="tool"><span class="d">加载中…</span></div></div>
+    </div>
+
+    <div class="sec" style="flex:1; display:flex; flex-direction:column; border-bottom:none; min-height:0;">
+      <h2>事件流（后端 → 前端 唯一契约）</h2>
+      <div id="events"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+const PHASES = [
+  ['idle', '空闲'], ['observe', '观察'], ['think', '思考'],
+  ['act', '行动'], ['done', '完成']
+];
+// session_id 存在 localStorage：刷新页面还是同一个会话，历史能从磁盘捞回来
+const SID_KEY = 'agentlab.session_id';
+let SESSION = localStorage.getItem(SID_KEY);
+if (!SESSION) {
+  SESSION = 's-' + Math.random().toString(36).slice(2);
+  localStorage.setItem(SID_KEY, SESSION);
+}
+const log = document.getElementById('log');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const retryBtn = document.getElementById('retry');
+const eventsBox = document.getElementById('events');
+let controller = null;                 // 用来中断当前请求
+let stopTimer = null;                  // 中断兜底计时器
+let lastUserText = '';                 // 最近一次问了什么，"重新生成"要用
+let stats = {turn: 0, tools: 0, chunks: 0, t0: 0};
+
+/* ---------- 右侧：状态机 ---------- */
+const fsm = document.getElementById('fsm');
+fsm.innerHTML = PHASES.map(([k, label], i) =>
+  `<div class="node" data-phase="${k}">${label}</div>` +
+  (i < PHASES.length - 1 ? '<span class="arrow">▶</span>' : '')
+).join('');
+
+function setPhase(phase, turn) {
+  const last = fsm.querySelector('[data-phase="done"]');
+  const isStop = phase === 'stopped';
+  const isFail = phase === 'failed';
+
+  let past = false;
+  fsm.querySelectorAll('.node').forEach(n => {
+    const isNow = n.dataset.phase === phase || ((isStop || isFail) && n.dataset.phase === 'done');
+    n.classList.toggle('on', isNow);
+    n.classList.toggle('fail', isNow && isFail);
+    n.classList.toggle('stopped', isNow && isStop);
+    n.classList.toggle('done', !isNow && past);
+    if (isNow) past = true;
+  });
+
+  last.textContent = isStop ? '中断' : (isFail ? '失败' : '完成');
+  if (turn !== undefined && turn > 0) document.getElementById('s-turn').textContent = turn;
+}
+
+function bumpStats() {
+  document.getElementById('s-turn').textContent = stats.turn;
+  document.getElementById('s-tools').textContent = stats.tools;
+  document.getElementById('s-chunks').textContent = stats.chunks;
+  if (stats.t0) {
+    document.getElementById('s-time').textContent = ((Date.now() - stats.t0) / 1000).toFixed(1) + 's';
+  }
+}
+
+function pushEvent(type, data) {
+  const d = document.createElement('div');
+  d.className = 't-' + type;
+  const shown = typeof data === 'string' ? data : JSON.stringify(data);
+  d.textContent = type.padEnd(12) + (shown || '').slice(0, 160);
+  eventsBox.appendChild(d);
+  while (eventsBox.childElementCount > 300) eventsBox.removeChild(eventsBox.firstChild);
+  eventsBox.scrollTop = eventsBox.scrollHeight;
+}
+
+/* ---------- 对话区 ---------- */
+function scroll() { log.scrollTop = log.scrollHeight; }
+
+// 工具结果和回答里常有网址，先转义再链接化，既能点又不至于被注入
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
+const linkify = s => esc(s).replace(/(https?:\/\/[^\s<>"']+)/g,
+  '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+function addUser(text) {
+  const d = document.createElement('div');
+  d.className = 'msg user';
+  d.innerHTML = '<div class="who">你</div><div class="bubble"></div>';
+  d.querySelector('.bubble').textContent = text;
+  log.appendChild(d); scroll();
+}
+
+function addAssistant() {
+  const d = document.createElement('div');
+  d.className = 'msg agent';
+  d.innerHTML = '<div class="who">Agent</div><div class="cards"></div>' +
+                '<div class="bubble"><span class="caret">&nbsp;</span></div>';
+  log.appendChild(d); scroll();
+  return {
+    cards: d.querySelector('.cards'),
+    bubble: d.querySelector('.bubble'),
+    caret: d.querySelector('.caret'),
+    text: ''
+  };
+}
+
+function addCard(ui, name, args) {
+  const el = document.createElement('details');
+  el.className = 'card';
+  el.open = false;
+  const argsStr = Object.entries(args || {}).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ');
+  el.innerHTML = `<summary><span class="name">${name}</span>` +
+                 `<span class="args">(${argsStr})</span><span class="ms">运行中…</span></summary>` +
+                 `<div class="out">…</div>`;
+  ui.cards.appendChild(el); scroll();
+  return el;
+}
+
+/* ---------- 刷新后重画历史 ---------- */
+function renderHistory(messages) {
+  let ui = null;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role === 'system') continue;
+
+    if (m.role === 'user') {
+      addUser(m.content);
+      ui = null;
+      continue;
+    }
+
+    if (m.role === 'assistant') {
+      const calls = m.tool_calls || [];
+      if (!ui) ui = addAssistant();
+      if (ui.caret.parentNode) ui.caret.remove();
+
+      for (const tc of calls) {
+        let args = {};
+        try { args = JSON.parse(tc.function.arguments || '{}'); } catch {}
+        const card = addCard(ui, tc.function.name, args);
+        const hit = messages.find(x => x.role === 'tool' && x.tool_call_id === tc.id);
+        if (hit) {
+          card.classList.toggle('fail', /^错误/.test(hit.content || ''));
+          card.querySelector('.ms').textContent = '历史';
+          card.querySelector('.out').innerHTML = linkify(hit.content);
+        }
+      }
+      if (m.content) {
+        ui.text += m.content;
+        ui.bubble.innerHTML = linkify(ui.text);
+      }
+      continue;
+    }
+    // role === 'tool' 已经在上一步按 tool_call_id 配对进卡片了
+  }
+  // 清掉恢复过程中产生的空壳（比如连续两条 user 之间的空 assistant）
+  log.querySelectorAll('.msg.agent').forEach(el => {
+    const b = el.querySelector('.bubble');
+    if (!el.querySelector('.cards').childElementCount && !b.textContent.trim()) el.remove();
+  });
+}
+
+async function loadHistory() {
+  try {
+    const r = await fetch('/api/history?session_id=' + encodeURIComponent(SESSION));
+    const d = await r.json();
+    if (d.messages && d.messages.length) {
+      renderHistory(d.messages);
+      pushEvent('history', `已恢复 ${d.messages.length} 条历史消息（session ${d.session_id}）`);
+    }
+  } catch (e) {
+    pushEvent('error', '历史加载失败：' + e.message);
+  }
+}
+
+/* ---------- 拿到 /api/info ---------- */
+fetch('/api/info').then(r => r.json()).then(d => {
+  const badge = document.getElementById('modelBadge');
+  badge.textContent = d.ready ? d.model : '未配置密钥';
+  badge.classList.add(d.ready ? 'live' : 'bad');
+  const ws = document.getElementById('wsBadge');
+  ws.textContent = '已连接';
+  ws.classList.add('live');
+
+  document.getElementById('toolList').innerHTML = d.tools.length
+    ? d.tools.map(t => `<div class="tool"><span class="n">${t.name}</span>` +
+        `<span class="args">(${t.params.join(', ')})</span>` +
+        `<div class="d">${t.description}</div></div>`).join('')
+    : '<div class="tool"><span class="d">（没有注册任何工具）</span></div>';
+  loadHistory();                                   // 模型信息到位后，把上次的历史重画出来
+}).catch(() => {
+  const ws = document.getElementById('wsBadge');
+  ws.textContent = '后端未响应';
+  ws.classList.add('bad');
+});
+
+/* ---------- 交互 ---------- */
+document.querySelectorAll('.chip').forEach(c => c.onclick = () => { input.value = c.textContent; input.focus(); });
+
+function clearBoard() {
+  log.innerHTML = ''; eventsBox.innerHTML = '';
+  lastUserText = ''; retryBtn.disabled = true;
+  stats = {turn: 0, tools: 0, chunks: 0, t0: 0}; bumpStats(); setPhase('idle');
+}
+
+document.getElementById('reset').onclick = async () => {
+  await fetch('/api/reset', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                             body: JSON.stringify({session_id: SESSION})});
+  clearBoard();
+  pushEvent('history', '会话已清空（内存 + 磁盘）');
+  input.focus();
+};
+
+document.getElementById('newSession').onclick = () => {
+  SESSION = 's-' + Math.random().toString(36).slice(2);
+  localStorage.setItem(SID_KEY, SESSION);
+  clearBoard();
+  pushEvent('history', '新会话：' + SESSION);
+  input.focus();
+};
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('form').requestSubmit(); }
+});
+
+async function send(text, {isRetry = false} = {}) {
+  // 注意这里不禁用按钮：它现在是"停止"，必须始终可点。
+  // 万一服务端流没正常收尾，用户点它（10 秒兜底会掐掉本地流）总能脱身。
+  sendBtn.textContent = '停止'; sendBtn.classList.add('stopping');
+  retryBtn.disabled = true;
+  if (!isRetry) addUser(text);
+  lastUserText = text;
+  const ui = addAssistant();
+
+  stats = {turn: 0, tools: 0, chunks: 0, t0: Date.now()};
+  bumpStats();
+  controller = new AbortController();
+  let pendingCard = null;
+  const timer = setInterval(bumpStats, 200);
+
+  try {
+    const res = await fetch(isRetry ? '/api/retry' : '/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({session_id: SESSION, message: text}),
+      signal: controller.signal
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+        if (ev.type === '__end__') continue;
+        pushEvent(ev.type, ev.data);
+
+        switch (ev.type) {
+          case 'state':
+            setPhase(ev.data.phase, ev.data.turn);
+            if (ev.data.turn > 0) stats.turn = ev.data.turn;
+            if (ev.data.phase === 'act' && pendingCard) pendingCard = null;
+            bumpStats();
+            break;
+
+          case 'tool_call':
+            pendingCard = addCard(ui, ev.data.name, ev.data.args);
+            stats.tools++; bumpStats();
+            break;
+
+          case 'tool_result': {
+            const card = pendingCard || ui.cards.querySelector('.card:last-child');
+            if (card) {
+              card.classList.toggle('fail', !ev.data.ok);
+              card.querySelector('.ms').textContent = ev.data.elapsed + 's';
+              card.querySelector('.out').innerHTML = linkify(ev.data.result);
+              card.open = !ev.data.ok;                 // 失败的展开，方便看原因
+            }
+            break;
+          }
+
+          case 'token':
+            ui.text += ev.data;
+            ui.bubble.innerHTML = linkify(ui.text);
+            ui.bubble.appendChild(ui.caret);
+            stats.chunks++; scroll();
+            break;
+
+          case 'error': {
+            const d = document.createElement('div');
+            d.className = 'hint';
+            d.textContent = '⚠ ' + ev.data;
+            ui.cards.appendChild(d);
+            break;
+          }
+
+          case 'stopped': {
+            const d = document.createElement('div');
+            d.className = 'hint';
+            d.textContent = '⏹ 已中断（服务端已收手）。可以接着问，或点「重新生成」重跑这一轮。';
+            ui.cards.appendChild(d);
+            setPhase('stopped');
+            break;
+          }
+
+          case 'history': {
+            const d = document.createElement('div');
+            d.className = 'hint';
+            d.textContent = ev.data;
+            ui.cards.appendChild(d);
+            break;
+          }
+
+          case 'done':
+            if (ev.data) {
+              stats.turn = ev.data.turns; stats.tools = ev.data.tool_calls;
+              stats.chunks = ev.data.tokens;
+              document.getElementById('s-time').textContent = ev.data.elapsed + 's';
+              clearInterval(timer); bumpStats();
+            }
+            break;
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      const d = document.createElement('div');
+      d.className = 'hint';
+      d.textContent = '⚠ 请求失败：' + err.message;
+      ui.cards.appendChild(d);
+      pushEvent('error', err.message);
+    }
+  } finally {
+    clearInterval(timer);
+    clearTimeout(stopTimer); stopTimer = null;
+    if (ui.caret.parentNode) ui.caret.remove();
+    if (!ui.text) ui.bubble.textContent = '（这次没有生成内容）';
+    sendBtn.textContent = '发送'; sendBtn.classList.remove('stopping');
+    retryBtn.disabled = !lastUserText;
+    controller = null;
+    input.focus(); scroll();
+  }
+}
+
+document.getElementById('form').onsubmit = e => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text || controller) return;          // controller 非空 = 正在跑，别重复发
+  input.value = '';
+  send(text);
+};
+
+/* 停止：给服务端发信号，让它自己收手 —— 这样"已中断"事件还能顺着流回来，
+   界面上能看到它停在第几轮、已经调了哪些工具。
+   只 abort fetch 是假停：前端不看了，模型那边还在烧 token。 */
+sendBtn.addEventListener('click', async e => {
+  if (!controller) return;                       // 没在跑 → 当作正常提交
+  e.preventDefault();
+  try {
+    await fetch('/api/stop', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                              body: JSON.stringify({session_id: SESSION})});
+    pushEvent('stopped', '已发出中断信号，等服务端收手');
+  } catch (err) {
+    pushEvent('error', '中断请求失败：' + err.message);
+  }
+  // 兜底：10 秒还没收手（比如正卡在某个工具里），直接掐掉本地这条流
+  stopTimer = setTimeout(() => { if (controller) controller.abort(); }, 10000);
+});
+
+/* 重新生成：服务端会先撤销上一轮，再拿同一个问题重跑 */
+retryBtn.onclick = () => {
+  if (!lastUserText || controller) return;
+  // 把界面上上一轮的 Agent 回复删掉，重新生成会以流的方式补回来
+  const msgs = log.querySelectorAll('.msg.agent');
+  if (msgs.length) msgs[msgs.length - 1].remove();
+  send(lastUserText, {isRetry: true});
+};
+
+setPhase('idle');
+input.focus();
+</script>
+</body>
+</html>

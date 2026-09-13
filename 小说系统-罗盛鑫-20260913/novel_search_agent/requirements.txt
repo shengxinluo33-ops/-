@@ -1,0 +1,26 @@
+# novel_search_agent 依赖清单
+# 版本取自本机实测通过的组合（2026-09-02，Python 3.11.1）
+
+# ---- LangChain / LangGraph ----
+# 关键约束：langgraph 1.x 会把 langchain-core 拉到 1.x，
+# 和课程里在用的 langchain / langchain-community 0.3.x 直接冲突。
+# 所以这里把 langchain-core 钉在 0.3.75，langgraph 用 0.3.34（它要求 core<0.4）。
+langchain==0.3.27
+langchain-core==0.3.75
+langchain-openai==0.3.32
+langgraph==0.3.34
+
+# ---- 工具 5：DBQuery ----
+faiss-cpu==1.15.0
+
+# ---- 工具 3：WebSearch ----
+tavily-python==0.8.0
+
+# ---- 工具 4：WebScrape ----
+beautifulsoup4==4.14.3
+requests==2.32.5
+# playwright 的 pip 包装完还要下浏览器：playwright install chromium
+playwright==1.58.0
+
+# ---- 配置 ----
+python-dotenv==1.2.1

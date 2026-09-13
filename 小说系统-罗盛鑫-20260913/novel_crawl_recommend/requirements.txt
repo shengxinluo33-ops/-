@@ -1,0 +1,31 @@
+# novel_crawl_recommend 依赖清单
+# 版本取自本机实测通过的组合（2026-09-02，Python 3.11.1）
+
+# ---- Web 前端 ----
+flask==3.1.2
+
+# ---- 工具3 复用的搜索 ----
+tavily-python==0.8.0
+
+# ---- 爬虫：静态解析 + 动态渲染 ----
+beautifulsoup4==4.14.3
+requests==2.32.5
+lxml==6.0.2
+# pip 装完还要下浏览器：playwright install chromium
+playwright==1.58.0
+
+# ---- 存储：SQLite 内置；向量库用 FAISS + 在线 embedding ----
+faiss-cpu==1.15.0
+langchain-openai==0.3.32
+langchain-core==0.3.75   # 与课程 langchain 0.3.x 共存，别让 pip 升到 1.x
+
+# ---- 大白话推荐（intent.py 的意图解析）----
+# 用 openai 原生 SDK，跟课程 ch1 的 03_工具调用与Agent.ipynb 一致。
+# 不填 API_KEY 也能跑，意图解析会自动降级成规则匹配（见 intent.py）
+openai==1.109.1
+
+# ---- 书名比对：繁简/全角归一化（紐約時報 vs 纽约时报）----
+zhconv==1.4.3
+
+# ---- 配置 ----
+python-dotenv==1.2.1

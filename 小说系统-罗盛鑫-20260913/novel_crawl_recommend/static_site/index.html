@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小说检索推荐系统</title>
+<style>
+  :root{
+    /* 颜色。--ink3 是给次要文字用的：原来的 #999/#aaa/#bbb 在白底上只有
+       2.0~2.9:1，低于 WCAG AA 的 4.5:1，小字基本看不清。 */
+    --red:#ed4259; --red-dark:#c9303f; --red-soft:#fdeef0;
+    --ink:#26282c; --ink2:#5c6066; --ink3:#767c85;
+    --line:#e6e8eb; --line-strong:#d8dbe0;
+    --bg:#f6f7f9; --card:#fff; --gold:#f5a623;
+    /* 阴影三级：常态 / 抬起 / 浮层 */
+    --shadow-1:0 1px 2px rgba(16,24,40,.05);
+    --shadow-2:0 4px 12px rgba(16,24,40,.09);
+    --shadow-3:0 10px 28px rgba(16,24,40,.13);
+    /* 间距。改之前是 16/18/24/14/9/10/11/7/26/70 全靠手感，没有节奏。 */
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+    --sp-5:20px; --sp-6:24px; --sp-8:32px;
+    --r-sm:4px; --r-md:8px; --r-lg:12px; --r-pill:999px;
+    --font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",
+           "Microsoft YaHei",sans-serif;
+    --fs-xs:11px; --fs-sm:12px; --fs-md:14px; --fs-lg:15px;
+    --shell:1440px;      /* 侧栏 + 内容区的总宽度 */
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:var(--font);background:var(--bg);color:var(--ink)}
+  /* 原来的 input 直接 outline:none，键盘用户完全看不出焦点在哪 */
+  :focus-visible{outline:2px solid var(--red);outline-offset:2px}
+
+  /* ---------- 顶部 ---------- */
+  header{background:var(--ink);color:#fff}
+  .top{max-width:var(--shell);margin:0 auto;padding:var(--sp-4) var(--sp-6);display:flex;
+       align-items:center;gap:var(--sp-6);flex-wrap:wrap}
+  .logo{font-size:20px;font-weight:700;letter-spacing:1px;white-space:nowrap}
+  .logo span{color:var(--red)}
+  .searchbar{flex:1;min-width:280px;display:flex;border-radius:var(--r-md);
+             transition:box-shadow .18s ease}
+  .searchbar:focus-within{box-shadow:0 0 0 3px rgba(237,66,89,.18)}
+  .searchbar input{flex:1;padding:10px var(--sp-4);border:none;
+                   border-radius:var(--r-md) 0 0 var(--r-md);
+                   font-size:var(--fs-md);outline:none}
+  .searchbar button{padding:10px var(--sp-6);background:var(--red);color:#fff;border:none;
+                    border-radius:0 var(--r-md) var(--r-md) 0;cursor:pointer;
+                    font-size:var(--fs-md);white-space:nowrap}
+  .searchbar button:hover{background:var(--red-dark)}
+  .top-actions{display:flex;gap:var(--sp-2)}
+  .btn-ghost{padding:9px var(--sp-4);border:1px solid rgba(255,255,255,.35);
+             background:transparent;color:#fff;border-radius:var(--r-sm);
+             cursor:pointer;font-size:13px}
+  .btn-ghost:hover{border-color:#fff}
+  .btn-ghost:disabled{opacity:.5;cursor:not-allowed}
+
+  /* ---------- 侧边分类栏 ----------
+     原来是顶部横向一条，22 个分类挤在一起还得靠"更多"折叠。竖排之后全部摊开，
+     不够高就滚——分类是树状导航，竖着排才是它该有的样子。 */
+  .shell{display:flex;max-width:var(--shell);margin:0 auto;
+         background:var(--bg);align-items:flex-start}
+  .side{width:240px;flex:none;position:sticky;top:0;height:100vh;
+        display:flex;flex-direction:column;background:var(--card);
+        border-right:1px solid var(--line)}
+  .side-block{padding:var(--sp-4) var(--sp-4) var(--sp-3);
+              border-bottom:1px solid var(--line);flex:none}
+  .side-title{font-size:var(--fs-xs);color:var(--ink3);letter-spacing:1px;
+              margin-bottom:var(--sp-2)}
+  .side-mode{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink2)}
+  .side-mode label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .side-mode input{margin:0;accent-color:var(--red)}
+  /* 分类列表自己滚，上下两块（检索方式、状态）固定不动 */
+  .side-cats{flex:1;overflow-y:auto;overflow-x:hidden;padding:var(--sp-2);
+             scrollbar-width:thin}
+  .cat{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);
+       padding:9px var(--sp-3);font-size:var(--fs-md);color:var(--ink2);cursor:pointer;
+       border-radius:var(--r-sm);border-left:3px solid transparent;user-select:none}
+  .cat:hover{background:var(--bg);color:var(--ink)}
+  .cat.on{color:var(--red);font-weight:600;background:var(--red-soft);
+          border-left-color:var(--red)}
+  /* 分类名后面跟一个本数，点之前就知道这个分类有多少货。
+     tabular-nums 让数字等宽，不然滚动时宽度会跳。 */
+  .cat-n{font-size:var(--fs-xs);color:var(--ink3);font-weight:400;
+         font-variant-numeric:tabular-nums}
+  .cat.on .cat-n{color:var(--red);opacity:.7}
+  .side-foot{flex:none;padding:var(--sp-3) var(--sp-4);border-top:1px solid var(--line);
+             font-size:var(--fs-sm);color:var(--ink3)}
+  /* 窄屏：竖栏收成顶部一条横向滑动的分类条，和原来的交互一致 */
+  @media (max-width:899px){
+    /* align-items 从 flex-start 改回 stretch：桌面那条是为了让侧栏 sticky 生效，
+       竖排时才需要。横排时不改的话侧栏会按内容宽度撑到 1825px，
+       把页面顶出横向滚动条，overflow-x:auto 也就没东西可滚了。 */
+    .shell{flex-direction:column;align-items:stretch}
+    .side{width:auto;height:auto;position:static;border-right:0;min-width:0;
+          border-bottom:1px solid var(--line)}
+    .side-block{padding:var(--sp-3) var(--sp-4) var(--sp-2)}
+    .side-mode{flex-direction:row;flex-wrap:wrap;gap:var(--sp-4)}
+    /* flex:none 是关键：不写的话 .side-cats 会被 .side 的 flex:1 撑成一屏高，
+       而 row 布局下 .cat 又因为 align-items:stretch 被拉成同样高 —— 实测
+       420px 下分类条变成 977px 高的一大块。 */
+    .side-cats{display:flex;flex-direction:row;flex:none;align-items:center;
+               overflow-x:auto;overflow-y:hidden;padding:0 var(--sp-3);
+               min-width:0;-webkit-overflow-scrolling:touch}
+    /* 22 个分类是包在 #catTabs 里的，光让 .side-cats 横排不够 —— #catTabs
+       自己还是 block，里面照样竖着排（实测 420px 下分类条变成 977px 高）。 */
+    #catTabs{display:flex;flex-direction:row;flex-wrap:nowrap}
+    .cat{flex:none;border-left:0;border-bottom:2px solid transparent;white-space:nowrap;
+         border-radius:0;padding:10px var(--sp-3)}
+    .cat.on{background:transparent;border-bottom-color:var(--red)}
+    .side-foot{padding:var(--sp-2) var(--sp-4)}
+  }
+
+  /* ---------- 分页 ---------- */
+  .pager{display:flex;align-items:center;justify-content:center;gap:var(--sp-4);
+         margin:var(--sp-6) 0 var(--sp-2);font-size:13px;color:var(--ink2)}
+  .pager button{padding:7px 18px;border:1px solid var(--line);background:var(--card);
+                color:var(--ink2);border-radius:var(--r-sm);cursor:pointer;font-size:13px}
+  .pager button:hover:not(:disabled){border-color:var(--red);color:var(--red)}
+  .pager button:disabled{opacity:.4;cursor:not-allowed}
+
+  /* ---------- 主体 ---------- */
+  main{padding:var(--sp-5) var(--sp-6) 70px;min-width:0}
+  .segs{display:flex;gap:0;margin-bottom:var(--sp-4);border:1px solid var(--line);
+        border-radius:var(--r-sm);overflow:hidden;width:fit-content;background:var(--card)}
+  .seg{padding:7px 18px;cursor:pointer;font-size:13px;color:var(--ink2)}
+  .seg.on{background:var(--red);color:#fff}
+  .seg+.seg{border-left:1px solid var(--line)}
+  .meta-line{font-size:var(--fs-sm);color:var(--ink3);margin:0 0 var(--sp-4)}
+
+  /* ---------- 卡片网格 ---------- */
+  /* minmax 从 150px 提到 170px：1200px 宽时原来会挤到 7-8 列、卡片仅 140px，
+     简介必然被裁。宽屏再锁死 6 列，不然 1440px 下会拉出 8 列。 */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+        gap:var(--sp-5)}
+  @media (min-width:1400px){
+    .grid{grid-template-columns:repeat(6,1fr)}
+  }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);
+        cursor:pointer;overflow:hidden;box-shadow:var(--shadow-1);
+        transition:transform .18s ease,box-shadow .18s ease}
+  .card:hover{transform:translateY(-4px);box-shadow:var(--shadow-3)}
+  /* 尊重系统的"减少动效"设置 */
+  @media (prefers-reduced-motion:reduce){
+    .card{transition:none}
+    .card:hover{transform:none}
+  }
+  .cover{position:relative;padding-top:133%;background:linear-gradient(135deg,#e9edf2,#d6dce4)}
+  .cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+  /* 占位封面：做成"书脊"的样子，没有真封面的书看着也是设计过的，不像缺失 */
+  .cover .ph,.sheet-cover .ph{position:absolute;inset:0;display:flex;flex-direction:column;
+       justify-content:center;padding:14px 12px;color:#fff;overflow:hidden}
+  .cover .ph::before,.sheet-cover .ph::before{content:"";position:absolute;left:10px;top:0;
+       bottom:0;width:1px;background:rgba(255,255,255,.35)}
+  .cover .ph::after,.sheet-cover .ph::after{content:"";position:absolute;right:-30%;top:-20%;
+       width:90%;height:60%;border-radius:50%;background:rgba(255,255,255,.10)}
+  .ph-t{position:relative;font-size:19px;font-weight:700;line-height:1.35;letter-spacing:1px;
+        text-shadow:0 1px 3px rgba(0,0,0,.18)}
+  .ph-a{position:relative;margin-top:10px;font-size:11px;opacity:.85}
+  .ph-c{position:relative;margin-top:auto;font-size:10px;opacity:.7;letter-spacing:2px}
+  .badge{position:absolute;left:0;top:10px;background:rgba(38,40,44,.8);color:#fff;
+         font-size:var(--fs-xs);padding:2px 7px;border-radius:0 var(--r-sm) var(--r-sm) 0}
+  .card-b{padding:var(--sp-3) var(--sp-3) 11px}
+  .card-t{font-weight:600;font-size:var(--fs-md);color:var(--ink);overflow:hidden;
+          text-overflow:ellipsis;white-space:nowrap}
+  .card-a{font-size:var(--fs-sm);color:var(--ink3);margin-top:3px;overflow:hidden;
+          text-overflow:ellipsis;white-space:nowrap}
+  /* 原来是 height:38px + line-height:1.5 = 2.1 行，第二行被拦腰切断。
+     用 line-clamp 才是"截断"该有的样子，多出的行给省略号。 */
+  .card-d{font-size:var(--fs-sm);color:var(--ink2);margin-top:6px;
+          display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+          overflow:hidden;line-height:1.5;min-height:36px}
+  .card-f{display:flex;justify-content:space-between;align-items:baseline;margin-top:7px;
+          font-size:var(--fs-xs);color:var(--ink3)}
+  .tag{display:inline-block;padding:1px 6px;background:#f3f5f7;color:var(--ink3);
+       border-radius:var(--r-sm);font-size:var(--fs-xs);line-height:1.7}
+  .stars{color:var(--gold);letter-spacing:-1px}
+
+  /* ---------- 榜单表格 ---------- */
+  table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);
+        border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
+  th,td{padding:11px var(--sp-3);border-bottom:1px solid var(--line);text-align:left;
+        vertical-align:top}
+  th{background:#fafbfc;font-weight:600;font-size:13px;white-space:nowrap}
+  tbody tr:hover{background:#fcfdff}
+  td.t-title{min-width:130px;font-weight:600;color:var(--ink)}
+  td.t-desc{color:var(--ink2);min-width:280px}
+  td.t-link a{color:var(--red);font-size:var(--fs-sm);word-break:break-all}
+  .rank-dot{display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;
+            border-radius:var(--r-sm);background:#f0f1f3;color:var(--ink3);
+            font-size:var(--fs-sm)}
+  .rank-dot.top{background:var(--red);color:#fff}
+
+  /* ---------- 状态 ---------- */
+  .msg{padding:10px var(--sp-4);border-radius:var(--r-sm);margin-bottom:var(--sp-4);
+       font-size:13px}
+  .msg.err{background:#fff2f0;color:#a8071a;border:1px solid #ffccc7}
+  .msg.ok{background:#f6ffed;color:#237804;border:1px solid #b7eb8f}
+  .msg.info{background:#eaf3fd;color:#1c5fa8;border:1px solid #bcd9f7}
+  /* agent 的意图回显：不抢戏，左边一道红线区分于普通提示 */
+  .msg.echo{background:var(--red-soft);color:var(--red-dark);
+            border:1px solid rgba(237,66,89,.25)}
+  .empty{padding:60px var(--sp-5);text-align:center;color:var(--ink3);font-size:var(--fs-md)}
+
+  /* ---------- 详情抽屉 ---------- */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;
+        align-items:center;justify-content:center;padding:var(--sp-6);z-index:50}
+  .mask.on{display:flex}
+  .sheet{background:var(--card);border-radius:var(--r-lg);max-width:760px;width:100%;
+         max-height:86vh;overflow:auto;position:relative;box-shadow:var(--shadow-3)}
+  .sheet-x{position:absolute;right:14px;top:10px;font-size:24px;color:var(--ink3);
+           cursor:pointer;line-height:1;z-index:2}
+  .sheet-x:hover{color:var(--ink)}
+  .sheet-h{display:flex;gap:var(--sp-5);padding:var(--sp-6) var(--sp-6) 18px;
+           border-bottom:1px solid var(--line)}
+  .sheet-cover{width:120px;flex:none;border-radius:var(--r-sm);overflow:hidden;
+               background:linear-gradient(135deg,#e9edf2,#d6dce4)}
+  .sheet-cover img,.sheet-cover .ph{width:120px;height:160px;object-fit:cover}
+  .sheet-cover .ph{display:flex;align-items:center;justify-content:center;
+                   font-size:42px;font-weight:700;color:#fff}
+  .sheet-h h2{margin:0 0 6px;font-size:20px;color:var(--ink)}
+  .sheet-meta{font-size:13px;color:var(--ink3);margin-bottom:10px}
+  .sheet-desc{font-size:13px;color:var(--ink2);line-height:1.8;max-height:210px;
+              overflow:auto}
+  .sheet-b{padding:var(--sp-4) var(--sp-6) var(--sp-6);font-size:13px}
+  .sheet-b h4{margin:0 0 var(--sp-2);font-size:13px;color:var(--ink)}
+  .kv{display:flex;gap:var(--sp-2);margin-bottom:6px;align-items:baseline}
+  .kv b{color:var(--ink3);font-weight:400;flex:none;width:66px;font-size:var(--fs-sm)}
+  .sheet-b a{color:var(--red);word-break:break-all}
+  .links{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:var(--sp-4)}
+  .links a{display:inline-block;padding:6px var(--sp-3);border:1px solid var(--red);
+           color:var(--red);border-radius:var(--r-sm);text-decoration:none;
+           font-size:var(--fs-sm)}
+  .links a:hover{background:var(--red);color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="top">
+    <div class="logo">小说<span>检索</span></div>
+    <div class="searchbar">
+      <input type="text" id="q" placeholder="输入小说类型（武侠 / 言情）或一句描述（女主重生复仇古言）">
+      <button id="search">搜索</button>
+    </div>
+    <div class="top-actions">
+      <!-- 静态版没有后端，采集按钮用不了也不该有：挂在公开页面上等于
+           谁都能让你的服务器去爬起点。这里换成数据时间的说明。 -->
+      <span class="btn-ghost" style="border-color:transparent" id="genAt">数据加载中…</span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="side">
+    <div class="side-block">
+      <div class="side-title">检索方式</div>
+      <div class="side-mode">
+        <label><input type="radio" name="mode" value="smart" checked> 智能匹配（说人话）</label>
+        <label><input type="radio" name="mode" value="keyword"> 分类/关键词</label>
+      </div>
+    </div>
+    <div class="side-cats" id="sideCats">
+      <!-- 分类是动态的（库里 22 个），写死在 HTML 里就全点不到。
+           由 app.js 从 data/meta.json 读回来后填到 #catTabs 里。 -->
+      <div class="cat on" data-cat="">全部<span class="cat-n" id="allCount"></span></div>
+      <div id="catTabs"></div>
+    </div>
+    <div class="side-foot" id="status">加载中…</div>
+  </aside>
+
+  <main>
+    <div class="segs">
+      <div class="seg on" data-view="grid">封面卡片</div>
+      <div class="seg" data-view="table">榜单表格</div>
+    </div>
+    <p class="meta-line" id="metaLine">—</p>
+    <div id="msg"></div>
+    <div id="result"><div class="empty">输入类型或描述开始检索</div></div>
+    <div class="pager" id="pager" hidden></div>
+  </main>
+</div>
+
+<div class="mask" id="mask">
+  <div class="sheet">
+    <div class="sheet-x" id="sheetX">×</div>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

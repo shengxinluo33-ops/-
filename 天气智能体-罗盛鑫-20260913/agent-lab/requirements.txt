@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+openai
+python-dotenv
+requests
+beautifulsoup4
+lxml
+
+# 可选：配了 TAVILY_API_KEY，web_search 会优先用 Tavily；
+# 不配也能跑，自动走 Bing RSS
+tavily-python
